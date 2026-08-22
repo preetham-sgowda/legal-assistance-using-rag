@@ -1,36 +1,37 @@
 """
 Embedding model wrapper using sentence-transformers.
-Provides both direct embedding functions and a LangChain-compatible interface.
+Optimized for low-RAM CPU environments (Render 512MB free tier).
 """
+import logging
 import numpy as np
 from typing import Optional
 from sentence_transformers import SentenceTransformer
 from langchain_core.embeddings import Embeddings
 
+logger = logging.getLogger(__name__)
+
 _model: Optional[SentenceTransformer] = None
 _model_name: str = "all-MiniLM-L6-v2"
 
 
-def init_embedding_model(model_name: str = "all-MiniLM-L6-v2") -> SentenceTransformer:
-    """Initialize the embedding model (call once at startup)."""
-    global _model, _model_name
-    _model_name = model_name
-    _model = SentenceTransformer(model_name)
-    return _model
-
-
 def get_model() -> SentenceTransformer:
-    """Get the loaded model, initializing if needed."""
+    """Get or lazy-load the SentenceTransformer model on first query."""
     global _model
     if _model is None:
-        _model = SentenceTransformer(_model_name)
+        try:
+            import torch
+            torch.set_num_threads(1)
+        except Exception:
+            pass
+        logger.info(f"Lazy loading embedding model: {_model_name}")
+        _model = SentenceTransformer(_model_name, device="cpu")
     return _model
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
     """Embed a list of texts. Returns shape (n, 384) float32 array."""
     model = get_model()
-    embeddings = model.encode(texts, show_progress_bar=False)
+    embeddings = model.encode(texts, show_progress_bar=False, batch_size=8)
     return np.array(embeddings, dtype="float32")
 
 
@@ -42,15 +43,10 @@ def embed_query(text: str) -> np.ndarray:
 
 
 class LocalEmbeddings(Embeddings):
-    """
-    LangChain-compatible embeddings adapter wrapping sentence-transformers.
-    Used by FAISS.from_documents() and other LangChain vector stores.
-    """
+    """LangChain-compatible embeddings adapter wrapping sentence-transformers."""
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of document texts."""
         return embed_texts(texts).tolist()
 
     def embed_query(self, text: str) -> list[float]:
-        """Embed a single query."""
         return embed_query(text).tolist()
