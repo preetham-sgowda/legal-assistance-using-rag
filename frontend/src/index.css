@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #FAF8F3;
+  --color-paper-muted: #F2EFE9;
+  --color-paper-card: #FFFFFF;
+  --color-ink: #1B2A4A;
+  --color-ink-muted: #334155;
+  --color-seal-amber: #C08A2E;
+  --color-seal-amber-light: #FDF8EC;
+  --color-deep-teal: #10504A;
+  --color-deep-teal-light: #E6F2F0;
+  --color-slate-custom: #6B7280;
+  --color-rust: #B23A2E;
+
+  --font-display: "Source Serif 4", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+:root {
+  --paper: #FAF8F3;
+  --paper-muted: #F2EFE9;
+  --paper-card: #FFFFFF;
+  --ink: #1B2A4A;
+  --seal-amber: #C08A2E;
+  --deep-teal: #10504A;
+  --slate: #6B7280;
+  --rust: #B23A2E;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, .font-serif-display {
+  font-family: 'Source Serif 4', Georgia, serif;
+}
+
+.font-code-mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Custom scrollbar for readable book aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--paper-muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--slate);
+}
+
+/* Citation Seal Emboss Effect */
+.citation-seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #FDF6E3;
+  border: 1px solid #E2D2A4;
+  color: #8C5D0F;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  box-shadow: inset 0 1px 2px rgba(192, 138, 46, 0.15), 0 1px 1px rgba(0,0,0,0.05);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  margin: 0 0.2rem;
+  vertical-align: middle;
+}
+
+.citation-seal:hover {
+  background-color: #FAF0D4;
+  border-color: #C08A2E;
+  color: #6B4505;
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 2px rgba(192, 138, 46, 0.2), 0 2px 4px rgba(0,0,0,0.08);
+}
+
+.citation-seal.active {
+  background-color: var(--seal-amber);
+  color: #FFFFFF;
+  border-color: #9A6C20;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
