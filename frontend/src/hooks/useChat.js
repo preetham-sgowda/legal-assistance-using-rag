@@ -73,7 +73,7 @@ export function useChat() {
     setActiveTab('general');
   }, []);
 
-  // Send a message
+  // Send a message with automatic retry for server cold starts
   const sendMessage = async (text) => {
     if (!token || !text.trim() || loading) return;
 
@@ -87,25 +87,38 @@ export function useChat() {
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
 
-    try {
-      const response = await fetch(`${API_URL}/chat`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_id: currentSessionId,
-          message: text,
-        }),
-      });
+    const makeFetchRequest = async (retriesLeft = 1) => {
+      try {
+        const response = await fetch(`${API_URL}/chat`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_id: currentSessionId,
+            message: text,
+          }),
+        });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({ detail: 'Failed to get answer' }));
-        throw new Error(errData.detail || 'Failed to get answer');
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({ detail: 'Failed to get answer' }));
+          throw new Error(errData.detail || 'Failed to get answer');
+        }
+
+        return await response.json();
+      } catch (err) {
+        if (retriesLeft > 0) {
+          console.warn('Chat request failed, retrying in 1.5s (server spinning up)...', err);
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          return makeFetchRequest(retriesLeft - 1);
+        }
+        throw err;
       }
+    };
 
-      const data = await response.json();
+    try {
+      const data = await makeFetchRequest(1);
 
       if (!currentSessionId && data.session_id) {
         setCurrentSessionId(data.session_id);
@@ -129,7 +142,7 @@ export function useChat() {
         {
           id: `error-${Date.now()}`,
           role: 'assistant',
-          content: `⚠️ Error: ${err.message || 'Unable to connect to legal database.'}`,
+          content: `⚠️ Connection notice: The backend server is initializing or spinning up. Please try clicking send again in a few seconds.`,
           citations: [],
           mode: 'error',
           created_at: new Date().toISOString(),
@@ -147,7 +160,6 @@ export function useChat() {
 
     let targetSessionId = currentSessionId;
     if (!targetSessionId) {
-      // Temporary ID or wait for backend session creation on upload
       targetSessionId = `session-${Date.now()}`;
       setCurrentSessionId(targetSessionId);
     }
@@ -176,7 +188,6 @@ export function useChat() {
       });
       setActiveTab('document');
 
-      // Add system announcement in chat
       setMessages((prev) => [
         ...prev,
         {
