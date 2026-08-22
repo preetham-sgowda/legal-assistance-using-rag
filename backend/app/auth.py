@@ -1,45 +1,38 @@
 """
-JWT authentication dependency for FastAPI.
-Verifies Supabase-issued JWTs locally using PyJWT.
+Authentication dependency for FastAPI using Firebase Admin SDK.
+Verifies Firebase ID Tokens sent from the frontend.
 """
-import jwt
+import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from app.config import get_settings, Settings
+import firebase_admin
+from firebase_admin import auth
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    settings: Settings = Depends(get_settings),
 ) -> dict:
     """
-    Decode and verify the Supabase JWT from the Authorization header.
-    Returns the decoded payload containing user info.
+    Decode and verify the Firebase ID Token from the Authorization header.
+    Returns decoded token dictionary containing user info.
     """
     token = credentials.credentials
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
+        # Verify Firebase ID token
+        decoded_token = auth.verify_id_token(token)
         return {
-            "user_id": payload.get("sub"),
-            "email": payload.get("email"),
-            "user_metadata": payload.get("user_metadata", {}),
+            "user_id": decoded_token.get("uid"),
+            "email": decoded_token.get("email"),
+            "display_name": decoded_token.get("name"),
+            "avatar_url": decoded_token.get("picture"),
         }
-    except jwt.ExpiredSignatureError:
+    except Exception as e:
+        logger.warning(f"Firebase token verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token",
+            detail=f"Invalid or expired authentication token: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )

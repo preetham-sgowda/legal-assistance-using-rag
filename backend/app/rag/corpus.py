@@ -1,36 +1,52 @@
 """
-Mode 1 retriever: queries the law corpus stored in Supabase pgvector.
+Mode 1 retriever: queries the law corpus stored in the local persistent FAISS index.
 """
-from app.database import get_supabase
-from app.rag.embeddings import embed_query
+import os
+import logging
+from pathlib import Path
+from typing import Optional
+
+from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from app.rag.embeddings import LocalEmbeddings
+
+logger = logging.getLogger(__name__)
+
+INDEX_DIR = Path(__file__).resolve().parent.parent.parent / "corpus_index"
+_corpus_vectorstore: Optional[FAISS] = None
 
 
-def retrieve_from_corpus(query: str, match_count: int = 5, match_threshold: float = 0.3) -> list[Document]:
-    """
-    Embed the query and retrieve the most similar law corpus chunks
-    from Supabase via the match_documents RPC function.
+def get_corpus_vectorstore() -> Optional[FAISS]:
+    """Load or return the persistent FAISS law corpus vector store."""
+    global _corpus_vectorstore
+    if _corpus_vectorstore is not None:
+        return _corpus_vectorstore
 
-    Returns LangChain Document objects with metadata (act, section, etc.).
-    """
-    query_embedding = embed_query(query).tolist()
+    if not INDEX_DIR.exists() or not (INDEX_DIR / "index.faiss").exists():
+        logger.warning(f"Corpus index not found at {INDEX_DIR}. Run 'python -m scripts.ingest_corpus' first.")
+        return None
 
-    sb = get_supabase()
-    result = sb.rpc("match_documents", {
-        "query_embedding": query_embedding,
-        "match_threshold": match_threshold,
-        "match_count": match_count,
-    }).execute()
-
-    documents = []
-    for row in (result.data or []):
-        metadata = row.get("metadata", {})
-        metadata["similarity"] = row.get("similarity", 0.0)
-        documents.append(
-            Document(
-                page_content=row["content"],
-                metadata=metadata,
-            )
+    try:
+        embeddings = LocalEmbeddings()
+        _corpus_vectorstore = FAISS.load_local(
+            str(INDEX_DIR),
+            embeddings,
+            allow_dangerous_deserialization=True,
         )
+        logger.info(f"Successfully loaded FAISS law corpus index from {INDEX_DIR}")
+        return _corpus_vectorstore
+    except Exception as e:
+        logger.error(f"Failed to load FAISS corpus index: {e}")
+        return None
 
-    return documents
+
+def retrieve_from_corpus(query: str, match_count: int = 5) -> list[Document]:
+    """
+    Search the persistent FAISS index for relevant Indian Bare Act sections.
+    Returns list of LangChain Document objects with metadata.
+    """
+    vectorstore = get_corpus_vectorstore()
+    if vectorstore is None:
+        return []
+
+    return vectorstore.similarity_search(query, k=match_count)

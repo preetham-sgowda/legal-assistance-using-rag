@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import { auth, googleProvider } from '../lib/firebase';
 
 const AuthContext = createContext({
   user: null,
-  session: null,
+  sessionToken: null,
   loading: true,
   signInWithGoogle: async () => {},
   signOut: async () => {},
@@ -13,31 +14,27 @@ export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [session, setSession] = useState(null);
+  const [sessionToken, setSessionToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.access_token) {
-        syncUserWithBackend(session.access_token);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          const token = await currentUser.getIdToken();
+          setSessionToken(token);
+          await syncUserWithBackend(token);
+        } catch (err) {
+          console.warn('Failed to retrieve Firebase ID token:', err);
+        }
+      } else {
+        setSessionToken(null);
       }
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.access_token) {
-        syncUserWithBackend(session.access_token);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   const syncUserWithBackend = async (token) => {
@@ -50,27 +47,30 @@ export function AuthProvider({ children }) {
         },
       });
     } catch (err) {
-      console.warn('Backend sync warning (backend might be offline or initializing):', err);
+      console.warn('Backend sync notice (backend server initializing or offline):', err);
     }
   };
 
   const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (error) throw error;
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const token = await result.user.getIdToken();
+      setSessionToken(token);
+      await syncUserWithBackend(token);
+    } catch (error) {
+      console.error('Firebase Google Auth error:', error);
+      throw error;
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await firebaseSignOut(auth);
+    setUser(null);
+    setSessionToken(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, session: { access_token: sessionToken }, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
