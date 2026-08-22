@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.database import init_firebase
 from app.routes import auth_routes, chat_routes, upload_routes, history_routes
 
 # Optimize PyTorch memory footprint for CPU environment (Render free tier)
@@ -28,9 +29,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan."""
+    """Application lifespan: eager startup initialization."""
     settings = get_settings()
     logger.info("Initializing Nyaya backend server...")
+    init_firebase()
     logger.info(f"Using LLM: {settings.llm_model} via Groq")
     yield
     logger.info("Shutting down Nyaya backend")
