@@ -18,23 +18,33 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety timer: ensure loading screen never hangs for more than 2 seconds
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
         try {
           const token = await currentUser.getIdToken();
           setSessionToken(token);
-          await syncUserWithBackend(token);
+          // Fire backend sync in background — DO NOT await here so UI isn't blocked on backend cold starts
+          syncUserWithBackend(token).catch(err => console.warn('Background sync warning:', err));
         } catch (err) {
           console.warn('Failed to retrieve Firebase ID token:', err);
         }
       } else {
         setSessionToken(null);
       }
+      clearTimeout(safetyTimer);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, []);
 
   const syncUserWithBackend = async (token) => {
@@ -56,7 +66,7 @@ export function AuthProvider({ children }) {
       const result = await signInWithPopup(auth, googleProvider);
       const token = await result.user.getIdToken();
       setSessionToken(token);
-      await syncUserWithBackend(token);
+      syncUserWithBackend(token).catch(err => console.warn('Background sync warning:', err));
     } catch (error) {
       console.error('Firebase Google Auth error:', error);
       throw error;
