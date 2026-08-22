@@ -60,6 +60,17 @@ app.include_router(upload_routes.router)
 app.include_router(history_routes.router)
 
 
+@app.get("/")
+async def root():
+    """Root landing endpoint for backend API."""
+    return {
+        "name": "Nyaya Legal Assistant API",
+        "status": "online",
+        "health": "/health",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
