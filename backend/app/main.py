@@ -4,6 +4,7 @@ FastAPI application entry point.
 """
 import os
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -27,12 +28,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def warm_up_rag_models():
+    """Background pre-loader: loads SentenceTransformer and FAISS index so queries respond instantly."""
+    try:
+        from app.rag.corpus import get_corpus_vectorstore
+        logger.info("Pre-warming FAISS vectorstore and SentenceTransformer embeddings...")
+        get_corpus_vectorstore()
+        logger.info("FAISS vectorstore pre-warmed and ready for queries!")
+    except Exception as e:
+        logger.warning(f"RAG model warm-up notice: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: eager startup initialization."""
+    """Application lifespan: eager startup initialization and model pre-warming."""
     settings = get_settings()
     logger.info("Initializing Nyaya backend server...")
     init_firebase()
+    
+    # Pre-warm RAG vectorstore in background thread to avoid blocking server boot
+    threading.Thread(target=warm_up_rag_models, daemon=True).start()
+
     logger.info(f"Using LLM: {settings.llm_model} via Groq")
     yield
     logger.info("Shutting down Nyaya backend")
